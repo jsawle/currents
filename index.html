@@ -29,7 +29,7 @@
   .masthead p{margin:3px 0 0;font-size:12.5px;color:var(--muted);max-width:540px;line-height:1.45}
 
   /* ---- control panel ---- */
-  .panel{position:fixed;top:74px;left:18px;z-index:6;width:230px;
+  .panel{position:fixed;top:74px;right:18px;z-index:6;width:230px;
     background:var(--panel);backdrop-filter:blur(10px);
     border:1px solid var(--line);border-radius:14px;padding:14px 14px 8px;
     box-shadow:0 18px 50px rgba(0,0,0,.45)}
@@ -91,7 +91,7 @@
   .loading p{color:var(--muted);font-size:13px;margin:0}
 
   @media (max-width:640px){
-    .panel{top:auto;bottom:90px;left:10px;right:10px;width:auto}
+    .panel{top:auto;bottom:90px;right:10px;left:10px;width:auto}
     .legend{bottom:10px;left:10px;max-width:46%}
     .attrib{max-width:46%;font-size:9px}
     .masthead p{display:none}
@@ -390,19 +390,14 @@ CURRENTS.forEach(cur=>{
   const parts=new THREE.Points(pg,pmat);
   globeGroup.add(parts);
 
-  // directional arrowheads along the path (cones oriented along travel direction)
+  // directional arrowheads that travel along the path (animated)
   const arrows=[];
   const arrowColor = cur.cls==='warm' ? tColor(0.85) : tColor(0.18);
-  const arrowCount = Math.max(2, Math.round(curve.getLength()/22));
+  const arrowCount = Math.max(2, Math.round(curve.getLength()/26));
   const arrowMat = new THREE.MeshBasicMaterial({color:arrowColor,transparent:true,opacity:0.9});
   for(let a=0;a<arrowCount;a++){
-    const u = (a+0.5)/arrowCount;
-    const pos = curve.getPoint(u);
-    const tan = curve.getTangent(u).normalize();            // direction of travel
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.7,5.2,8), arrowMat);
-    cone.position.copy(pos.clone().multiplyScalar(1.012));
-    // orient cone's +Y axis along the travel tangent
-    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), tan);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.7,5.6,8), arrowMat);
+    cone.userData.offset = a/arrowCount;   // even spacing; advanced each frame
     globeGroup.add(cone);
     arrows.push(cone);
   }
@@ -508,6 +503,18 @@ function animate(){
       pos[i*3]=p.x;pos[i*3+1]=p.y;pos[i*3+2]=p.z;
     }
     o.parts.geometry.attributes.position.needsUpdate=true;
+
+    // advance arrowheads along the same curve, re-orienting to travel direction
+    if(o.arrows.length && o.arrows[0].visible){
+      const yAxis=new THREE.Vector3(0,1,0);
+      o.arrows.forEach(ar=>{
+        const u=(o.phase + ar.userData.offset)%1;
+        const p=o.curve.getPoint(u);
+        const tan=o.curve.getTangent(u).normalize();
+        ar.position.copy(p.multiplyScalar(1.012));
+        ar.quaternion.setFromUnitVectors(yAxis,tan);
+      });
+    }
   });
 
   // labels are children of globeGroup, so they rotate with the globe
