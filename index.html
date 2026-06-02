@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Ocean Currents &amp; Global Heat Transport — MapMaker</title>
+<style>
+  :root{
+    --warm:#ff5a3c;       /* warm current */
+    --warm-glow:#ffb199;
+    --cold:#3ea6ff;       /* cold current */
+    --cold-glow:#bfe3ff;
+    --ink:#0a1622;
+    --panel:rgba(10,22,34,.82);
+    --line:rgba(180,210,240,.18);
+    --txt:#e8f1fb;
+    --muted:#9fb4c9;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#04080e;color:var(--txt);
+    font-family:"Avenir Next","Segoe UI",system-ui,sans-serif;overflow:hidden}
+  #app{position:fixed;inset:0}
+  canvas{display:block}
+
+  /* ---- title ---- */
+  .masthead{position:fixed;top:0;left:0;right:0;padding:18px 22px;z-index:5;
+    pointer-events:none;background:linear-gradient(180deg,rgba(2,6,12,.7),transparent)}
+  .masthead h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.2px}
+  .masthead p{margin:3px 0 0;font-size:12.5px;color:var(--muted);max-width:540px;line-height:1.45}
+
+  /* ---- control panel ---- */
+  .panel{position:fixed;top:74px;left:18px;z-index:6;width:230px;
+    background:var(--panel);backdrop-filter:blur(10px);
+    border:1px solid var(--line);border-radius:14px;padding:14px 14px 8px;
+    box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .panel h2{margin:0 0 10px;font-size:11px;letter-spacing:1.4px;
+    text-transform:uppercase;color:var(--muted);font-weight:700}
+  .row{display:flex;align-items:center;justify-content:space-between;
+    padding:7px 0;font-size:13px;border-top:1px solid var(--line)}
+  .row:first-of-type{border-top:none}
+  .row label{cursor:pointer;display:flex;align-items:center;gap:8px}
+  .sw{width:11px;height:11px;border-radius:3px;flex:none}
+  .sw.warm{background:var(--warm);box-shadow:0 0 8px var(--warm-glow)}
+  .sw.cold{background:var(--cold);box-shadow:0 0 8px var(--cold-glow)}
+  /* toggle */
+  .tg{position:relative;width:38px;height:21px;flex:none}
+  .tg input{opacity:0;width:0;height:0;position:absolute}
+  .tg span{position:absolute;inset:0;background:#243648;border-radius:20px;
+    transition:.25s;cursor:pointer}
+  .tg span:before{content:"";position:absolute;width:15px;height:15px;left:3px;top:3px;
+    background:#fff;border-radius:50%;transition:.25s}
+  .tg input:checked + span{background:#2f7fd4}
+  .tg input:checked + span:before{transform:translateX(17px)}
+  .btn{width:100%;margin-top:8px;margin-bottom:6px;padding:9px;border:none;border-radius:9px;
+    background:#143a5c;color:var(--txt);font-size:12.5px;font-weight:600;
+    letter-spacing:.3px;cursor:pointer;transition:.2s;border:1px solid var(--line)}
+  .btn:hover{background:#1d5384}
+  .btn.active{background:linear-gradient(90deg,#ff5a3c,#ff8a3c);border-color:transparent;color:#1a0d06}
+  .speed{display:flex;align-items:center;gap:8px;padding:8px 0 2px;font-size:12px;color:var(--muted)}
+  .speed input{flex:1}
+
+  /* ---- legend ---- */
+  .legend{position:fixed;bottom:16px;left:18px;z-index:6;
+    background:var(--panel);backdrop-filter:blur(10px);border:1px solid var(--line);
+    border-radius:12px;padding:11px 14px;font-size:12px;max-width:230px}
+  .legend .grad{height:9px;border-radius:5px;margin:7px 0 5px;
+    background:linear-gradient(90deg,#3ea6ff,#7fd0e8,#ffd27f,#ff8a3c,#ff5a3c)}
+  .legend .ends{display:flex;justify-content:space-between;color:var(--muted);font-size:10.5px}
+  .legend .note{margin-top:7px;color:var(--muted);font-size:10.5px;line-height:1.4}
+
+  /* ---- attribution ---- */
+  .attrib{position:fixed;bottom:8px;right:12px;z-index:6;font-size:10px;
+    color:var(--muted);text-align:right;line-height:1.45;max-width:330px;opacity:.8}
+  .attrib a{color:#8fc0f0;text-decoration:none}
+
+  /* ---- info popup ---- */
+  .info{position:fixed;z-index:7;max-width:240px;background:var(--panel);
+    backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:11px;
+    padding:11px 13px;font-size:12.5px;line-height:1.45;pointer-events:none;
+    opacity:0;transform:translateY(6px);transition:.18s;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+  .info.show{opacity:1;transform:translateY(0)}
+  .info b{display:block;margin-bottom:3px;font-size:13.5px}
+  .info .tval{color:var(--muted);font-size:11px}
+
+  .loading{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+    background:#04080e;flex-direction:column;gap:14px;transition:opacity .6s}
+  .loading.hide{opacity:0;pointer-events:none}
+  .spin{width:34px;height:34px;border:3px solid rgba(120,170,220,.25);
+    border-top-color:#3ea6ff;border-radius:50%;animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .loading p{color:var(--muted);font-size:13px;margin:0}
+
+  @media (max-width:640px){
+    .panel{top:auto;bottom:90px;left:10px;right:10px;width:auto}
+    .legend{bottom:10px;left:10px;max-width:46%}
+    .attrib{max-width:46%;font-size:9px}
+    .masthead p{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="loading" id="loading">
+  <div class="spin"></div>
+  <p>Loading Esri imagery &amp; current data…</p>
+</div>
+
+<div class="masthead">
+  <h1>Ocean Currents &amp; Global Heat Transport</h1>
+  <p>Warm currents (red) carry heat from the equator toward the poles; cold currents (blue) return toward the equator. Together they move heat through the climate system — the Gulf Stream is the clearest example.</p>
+</div>
+
+<div class="panel">
+  <h2>Layers</h2>
+  <div class="row"><label><span class="sw warm"></span>Warm currents</label>
+    <div class="tg"><input type="checkbox" id="tWarm" checked><span></span></div></div>
+  <div class="row"><label><span class="sw cold"></span>Cold currents</label>
+    <div class="tg"><input type="checkbox" id="tCold" checked><span></span></div></div>
+  <div class="row"><label>Current labels</label>
+    <div class="tg"><input type="checkbox" id="tLabels"><span></span></div></div>
+  <div class="row"><label>Auto-rotate</label>
+    <div class="tg"><input type="checkbox" id="tSpin" checked><span></span></div></div>
+  <button class="btn" id="btnGulf">Highlight the Gulf Stream</button>
+  <div class="speed">Flow
+    <input type="range" id="speed" min="0.2" max="3" step="0.1" value="1">
+  </div>
+</div>
+
+<div class="legend">
+  <strong style="font-size:12px">Relative water temperature</strong>
+  <div class="grad"></div>
+  <div class="ends"><span>cold • poleward return</span><span>warm • from equator</span></div>
+  <div class="note">Particles flow in the direction of current travel. Arrow speed is illustrative, not to scale.</div>
+</div>
+
+<div class="info" id="info"></div>
+
+<div class="attrib">
+  Basemap: Esri World Imagery — sources: Esri, Maxar, Earthstar Geographics, GIS User Community.
+  Current paths generalized from Esri Living Atlas “Major Ocean Currents” (compiled from NOAA &amp; U.S. Army).
+  Built for NatGeo/Esri MapMaker education.
+</div>
+
+<!-- Three.js r128 (matches existing 3Dmodels tooling) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* =====================================================================
+   OCEAN CURRENTS GLOBE
+   - Esri World Imagery as equirectangular globe texture (export REST)
+   - Curated major-current polylines, classified warm / cold
+   - Animated flowing particles along each current
+   - Gulf Stream highlight + equator->pole heat-transport emphasis
+   ===================================================================== */
+
+const RAD = 100;                 // globe radius (scene units)
+const D2R = Math.PI/180;
+
+/* ---- lat/lng -> 3D position on sphere (radius r) ---- */
+function ll2v(lat,lng,r){
+  const phi=(90-lat)*D2R, th=(lng+180)*D2R;
+  return new THREE.Vector3(
+    -r*Math.sin(phi)*Math.cos(th),
+     r*Math.cos(phi),
+     r*Math.sin(phi)*Math.sin(th)
+  );
+}
+
+/* =====================================================================
+   CURRENT DATA
+   Generalized control points (lat,lng) for the world's major surface
+   currents. class: 'warm' (equator->pole, heat-carrying) or
+   'cold' (pole->equator return). Source classification: Esri Living
+   Atlas "Major Ocean Currents" (NOAA / U.S. Army).
+   ===================================================================== */
+const CURRENTS = [
+  // ---- ATLANTIC: the heat-transport story ----
+  {name:"Gulf Stream", cls:"warm", gulf:true, pts:[
+    [25,-80],[28,-79],[32,-77],[35,-74],[38,-70],[40,-65],[42,-58],[45,-48],[48,-38],[50,-30]]},
+  {name:"North Atlantic Drift", cls:"warm", gulf:true, pts:[
+    [50,-30],[52,-22],[55,-15],[58,-8],[60,-2],[62,4],[66,8],[70,12]]},
+  {name:"Norwegian Current", cls:"warm", gulf:true, pts:[
+    [62,4],[66,8],[70,15],[73,22],[75,30]]},
+  {name:"Canary Current", cls:"cold", pts:[
+    [40,-12],[36,-12],[30,-16],[24,-20],[18,-22],[14,-24]]},
+  {name:"North Equatorial (Atl)", cls:"warm", pts:[
+    [14,-24],[12,-35],[11,-45],[12,-55],[14,-62],[18,-66]]},
+  {name:"Brazil Current", cls:"warm", pts:[
+    [-5,-34],[-12,-37],[-20,-39],[-28,-46],[-35,-52]]},
+  {name:"Benguela Current", cls:"cold", pts:[
+    [-34,18],[-28,15],[-22,12],[-16,11],[-10,11]]},
+  {name:"South Equatorial (Atl)", cls:"warm", pts:[
+    [-10,11],[-8,-5],[-6,-20],[-5,-34]]},
+  {name:"Labrador Current", cls:"cold", pts:[
+    [62,-58],[58,-56],[54,-52],[50,-50],[46,-48]]},
+
+  // ---- PACIFIC ----
+  {name:"Kuroshio Current", cls:"warm", pts:[
+    [18,122],[24,126],[30,132],[35,140],[38,148],[40,158],[42,168]]},
+  {name:"North Pacific Current", cls:"warm", pts:[
+    [42,168],[44,180],[45,-165],[46,-150],[47,-135]]},
+  {name:"California Current", cls:"cold", pts:[
+    [47,-130],[42,-127],[36,-124],[30,-118],[24,-112]]},
+  {name:"North Equatorial (Pac)", cls:"warm", pts:[
+    [12,-110],[11,-140],[12,-170],[14,170],[16,140],[18,125]]},
+  {name:"Oyashio Current", cls:"cold", pts:[
+    [56,160],[50,155],[44,150],[40,146]]},
+  {name:"East Australia Current", cls:"warm", pts:[
+    [-12,148],[-20,153],[-28,154],[-36,151],[-42,150]]},
+  {name:"Peru (Humboldt) Current", cls:"cold", pts:[
+    [-45,-76],[-36,-74],[-26,-73],[-16,-78],[-8,-82]]},
+  {name:"South Equatorial (Pac)", cls:"warm", pts:[
+    [-4,-85],[-3,-120],[-2,-160],[-3,165],[-6,150]]},
+
+  // ---- INDIAN ----
+  {name:"Agulhas Current", cls:"warm", pts:[
+    [-12,42],[-20,40],[-28,33],[-35,26],[-38,22]]},
+  {name:"West Australian Current", cls:"cold", pts:[
+    [-38,112],[-30,110],[-22,110],[-14,112]]},
+  {name:"South Equatorial (Ind)", cls:"warm", pts:[
+    [-12,98],[-10,80],[-9,62],[-11,46],[-12,42]]},
+
+  // ---- SOUTHERN OCEAN: the great cold conveyor ----
+  {name:"Antarctic Circumpolar", cls:"cold", pts:[
+    [-55,-60],[-57,-30],[-58,0],[-57,30],[-55,60],[-54,90],[-55,120],[-57,150],
+    [-58,180],[-57,-150],[-56,-120],[-55,-90],[-55,-60]]},
+];
+
+/* temperature value 0(cold)..1(warm) for color ramp */
+function tColor(t){
+  // cold blue -> teal -> warm orange -> red
+  const stops=[
+    [0.0, [62,166,255]],
+    [0.45,[127,208,232]],
+    [0.6, [255,210,127]],
+    [0.8, [255,138,60]],
+    [1.0, [255,90,60]]
+  ];
+  for(let i=0;i<stops.length-1;i++){
+    if(t<=stops[i+1][0]){
+      const a=stops[i],b=stops[i+1];
+      const f=(t-a[0])/(b[0]-a[0]);
+      return new THREE.Color(
+        (a[1][0]+(b[1][0]-a[1][0])*f)/255,
+        (a[1][1]+(b[1][1]-a[1][1])*f)/255,
+        (a[1][2]+(b[1][2]-a[1][2])*f)/255);
+    }
+  }
+  return new THREE.Color(1,0.35,0.23);
+}
+
+/* ===================== SCENE SETUP ===================== */
+const app=document.getElementById('app');
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x04080e);
+
+const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,5000);
+camera.position.set(0,90,330);
+
+const renderer=new THREE.WebGLRenderer({antialias:false,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));  // cap for Chromebooks
+renderer.setSize(innerWidth,innerHeight);
+app.appendChild(renderer.domElement);
+
+/* starfield */
+(function stars(){
+  const g=new THREE.BufferGeometry(),N=1400,p=new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const r=1200+Math.random()*900,
+      th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);
+    p[i*3]=r*Math.sin(ph)*Math.cos(th);
+    p[i*3+1]=r*Math.sin(ph)*Math.sin(th);
+    p[i*3+2]=r*Math.cos(ph);
+  }
+  g.setAttribute('position',new THREE.BufferAttribute(p,3));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x8fa8c4,size:1.4,
+    transparent:true,opacity:.7})));
+})();
+
+/* lights */
+scene.add(new THREE.AmbientLight(0xffffff,0.95));
+const sun=new THREE.DirectionalLight(0xfff3e0,0.7);
+sun.position.set(-1,0.4,1); scene.add(sun);
+
+/* ---- globe with Esri World Imagery texture ---- */
+const globeGroup=new THREE.Group(); scene.add(globeGroup);
+
+// Esri World Imagery export: single equirectangular (Plate Carrée / 4326) image
+// covering the whole world. This is the public ArcGIS World Imagery service.
+const ESRI_IMG="https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export"
+  +"?bbox=-180,-90,180,90&bboxSR=4326&imageSR=4326&size=2048,1024"
+  +"&format=jpg&transparent=false&f=image";
+
+const loader=new THREE.TextureLoader();
+loader.setCrossOrigin('anonymous');
+
+const globeMat=new THREE.MeshPhongMaterial({color:0x16324d,shininess:6,specular:0x223a52});
+const globe=new THREE.Mesh(new THREE.SphereGeometry(RAD,72,54),globeMat);
+globeGroup.add(globe);
+
+loader.load(ESRI_IMG,
+  tex=>{ globeMat.map=tex; globeMat.color.set(0xffffff); globeMat.needsUpdate=true; doneLoading(); },
+  undefined,
+  err=>{ // fallback: NASA Blue Marble (used by the existing 3Dmodels tool) if Esri export blocked
+    loader.load("https://raw.githubusercontent.com/vasturiano/three-globe/master/example/img/earth-blue-marble.jpg",
+      tex=>{ globeMat.map=tex; globeMat.color.set(0xffffff); globeMat.needsUpdate=true; },
+      undefined,()=>{});
+    doneLoading();
+  });
+
+/* atmosphere halo */
+const halo=new THREE.Mesh(new THREE.SphereGeometry(RAD*1.025,72,54),
+  new THREE.ShaderMaterial({
+    transparent:true,side:THREE.BackSide,
+    uniforms:{c:{value:new THREE.Color(0x4ea3ff)}},
+    vertexShader:`varying vec3 vn;void main(){vn=normalize(normalMatrix*normal);
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader:`varying vec3 vn;uniform vec3 c;void main(){
+      float i=pow(0.62-dot(vn,vec3(0,0,1.)),3.0);
+      gl_FragColor=vec4(c,1.)*i;}`
+  }));
+globeGroup.add(halo);
+
+/* ===================== BUILD CURRENT PATHS ===================== */
+const flowR=RAD*1.012;            // slightly above surface
+const currentObjs=[];             // {curve,line,particles,cls,name,gulf,positions,count}
+
+function smoothCurve(pts){
+  const v=pts.map(p=>ll2v(p[0],p[1],flowR));
+  const c=new THREE.CatmullRomCurve3(v,false,'catmullrom',0.25);
+  // detect closed loop (ACC) -> close it
+  if(v[0].distanceTo(v[v.length-1])<RAD*0.05) c.closed=true;
+  return c;
+}
+
+const labelSprites=[];
+function makeLabel(text,pos){
+  const cv=document.createElement('canvas');
+  const ctx=cv.getContext('2d'); ctx.font='600 26px Avenir Next, sans-serif';
+  const w=ctx.measureText(text).width+24; cv.width=w; cv.height=40;
+  ctx.font='600 26px Avenir Next, sans-serif';
+  ctx.fillStyle='rgba(8,18,30,0.78)';
+  if(ctx.roundRect){ctx.beginPath();ctx.roundRect(0,0,w,40,8);ctx.fill();}
+  else ctx.fillRect(0,0,w,40);
+  ctx.fillStyle='#eaf2fb'; ctx.textBaseline='middle';
+  ctx.fillText(text,12,22);
+  const tex=new THREE.CanvasTexture(cv);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
+  sp.scale.set(w*0.13,5.2,1); sp.position.copy(pos.clone().multiplyScalar(1.04));
+  sp.visible=false; scene.add(sp); labelSprites.push(sp); return sp;
+}
+
+CURRENTS.forEach(cur=>{
+  const curve=smoothCurve(cur.pts);
+  const N=Math.max(40,cur.pts.length*16);
+  const cpts=curve.getPoints(N);
+
+  // base ribbon line, colored by warm/cold and position-along (equator->pole warming/cooling)
+  const geo=new THREE.BufferGeometry().setFromPoints(cpts);
+  const cols=new Float32Array(cpts.length*3);
+  cpts.forEach((p,i)=>{
+    // temperature: warm currents start hot & cool toward pole; cold currents start cold & warm toward equator
+    const f=i/(cpts.length-1);
+    let t = cur.cls==='warm' ? (0.95-0.45*f) : (0.05+0.4*f);
+    const c=tColor(t);
+    cols[i*3]=c.r; cols[i*3+1]=c.g; cols[i*3+2]=c.b;
+  });
+  geo.setAttribute('color',new THREE.BufferAttribute(cols,3));
+  const line=new THREE.Line(geo,new THREE.LineBasicMaterial({
+    vertexColors:true,transparent:true,opacity:0.55}));
+  globeGroup.add(line);
+
+  // flowing particles
+  const PC=Math.max(10,Math.round(N/6));
+  const pg=new THREE.BufferGeometry();
+  const ppos=new Float32Array(PC*3);
+  const pcol=new Float32Array(PC*3);
+  for(let i=0;i<PC;i++){
+    const c=cur.cls==='warm'?tColor(0.9):tColor(0.15);
+    pcol[i*3]=c.r;pcol[i*3+1]=c.g;pcol[i*3+2]=c.b;
+  }
+  pg.setAttribute('position',new THREE.BufferAttribute(ppos,3));
+  pg.setAttribute('color',new THREE.BufferAttribute(pcol,3));
+  const pmat=new THREE.PointsMaterial({size:2.6,vertexColors:true,transparent:true,
+    opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending});
+  const parts=new THREE.Points(pg,pmat);
+  globeGroup.add(parts);
+
+  // label at midpoint
+  const mid=curve.getPoint(0.5);
+  const label=makeLabel(cur.name,mid);
+
+  currentObjs.push({cur,curve,line,parts,PC,phase:Math.random(),label,
+    baseLineOpacity:0.55});
+});
+
+/* ===================== INTERACTION (drag + zoom) ===================== */
+let spin=true, dragging=false, lastX=0,lastY=0, rotV=0;
+let rotY=0, rotX=0;
+const el=renderer.domElement;
+el.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
+addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  rotY+=(e.clientX-lastX)*0.005;
+  rotX+=(e.clientY-lastY)*0.005;
+  rotX=Math.max(-1.2,Math.min(1.2,rotX));
+  lastX=e.clientX;lastY=e.clientY;rotV=0;
+});
+addEventListener('pointerup',()=>dragging=false);
+el.addEventListener('wheel',e=>{
+  e.preventDefault();
+  camera.position.z=Math.max(150,Math.min(460,camera.position.z+e.deltaY*0.25));
+},{passive:false});
+
+/* ---- controls ---- */
+const tWarm=document.getElementById('tWarm'),
+      tCold=document.getElementById('tCold'),
+      tLabels=document.getElementById('tLabels'),
+      tSpin=document.getElementById('tSpin'),
+      speed=document.getElementById('speed'),
+      btnGulf=document.getElementById('btnGulf');
+let gulfMode=false;
+
+function applyVisibility(){
+  currentObjs.forEach(o=>{
+    const on = o.cur.cls==='warm'?tWarm.checked:tCold.checked;
+    const dim = gulfMode && !o.cur.gulf;
+    o.line.visible=on;
+    o.parts.visible=on;
+    o.line.material.opacity = dim?0.06 : o.baseLineOpacity;
+    o.parts.material.opacity = dim?0.12 : 0.95;
+    o.parts.material.size = (gulfMode && o.cur.gulf)?3.8:2.6;
+    o.label.visible = on && tLabels.checked && (!gulfMode || o.cur.gulf);
+  });
+}
+tWarm.onchange=tCold.onchange=tLabels.onchange=applyVisibility;
+tSpin.onchange=()=>spin=tSpin.checked;
+btnGulf.onclick=()=>{
+  gulfMode=!gulfMode;
+  btnGulf.classList.toggle('active',gulfMode);
+  btnGulf.textContent=gulfMode?"Show all currents":"Highlight the Gulf Stream";
+  applyVisibility();
+};
+applyVisibility();
+
+/* ===================== PICKING (hover info) ===================== */
+const ray=new THREE.Raycaster(); ray.params.Points.threshold=3;
+const mouse=new THREE.Vector2(); const info=document.getElementById('info');
+let hoverName=null;
+addEventListener('pointermove',e=>{
+  mouse.x=(e.clientX/innerWidth)*2-1;
+  mouse.y=-(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(mouse,camera);
+  let found=null;
+  for(const o of currentObjs){
+    if(!o.parts.visible)continue;
+    if(ray.intersectObject(o.parts).length){found=o;break;}
+  }
+  if(found){
+    const c=found.cur;
+    info.innerHTML=`<b>${c.name}</b><span class="tval">${
+      c.cls==='warm'?'Warm current — carrying heat poleward':'Cold current — returning toward the equator'}</span>`;
+    info.style.left=Math.min(e.clientX+14,innerWidth-260)+'px';
+    info.style.top=(e.clientY+14)+'px';
+    info.classList.add('show'); hoverName=c.name;
+  }else if(hoverName){info.classList.remove('show');hoverName=null;}
+});
+
+/* ===================== ANIMATION LOOP ===================== */
+function animate(){
+  requestAnimationFrame(animate);
+  const sp=parseFloat(speed.value);
+
+  if(spin && !dragging) rotY+=0.0012;
+  globeGroup.rotation.y=rotY; globeGroup.rotation.x=rotX;
+
+  // advance flowing particles
+  currentObjs.forEach(o=>{
+    if(!o.parts.visible)return;
+    o.phase=(o.phase + 0.0016*sp)%1;
+    const pos=o.parts.geometry.attributes.position.array;
+    for(let i=0;i<o.PC;i++){
+      let u=(o.phase + i/o.PC)%1;
+      const p=o.curve.getPoint(u);
+      pos[i*3]=p.x;pos[i*3+1]=p.y;pos[i*3+2]=p.z;
+    }
+    o.parts.geometry.attributes.position.needsUpdate=true;
+  });
+
+  // keep labels attached to rotating globe
+  currentObjs.forEach(o=>{
+    if(!o.label.visible)return;
+    const mid=o.curve.getPoint(0.5).clone();
+    mid.applyEuler(new THREE.Euler(rotX,rotY,0));
+    o.label.position.copy(mid.multiplyScalar(1.05));
+  });
+
+  renderer.render(scene,camera);
+}
+animate();
+
+/* ===================== HELPERS ===================== */
+let loaded=false;
+function doneLoading(){
+  if(loaded)return; loaded=true;
+  setTimeout(()=>document.getElementById('loading').classList.add('hide'),250);
+}
+// safety: hide loader after 6s regardless
+setTimeout(doneLoading,6000);
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
