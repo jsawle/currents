@@ -255,7 +255,8 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x04080e);
 
 const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,5000);
-camera.position.set(0,90,330);
+camera.position.set(0,0,330);
+camera.lookAt(0,0,0);
 
 const renderer=new THREE.WebGLRenderer({antialias:false,alpha:false});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));  // cap for Chromebooks
@@ -346,8 +347,8 @@ function makeLabel(text,pos){
   ctx.fillText(text,12,22);
   const tex=new THREE.CanvasTexture(cv);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false}));
-  sp.scale.set(w*0.13,5.2,1); sp.position.copy(pos.clone().multiplyScalar(1.04));
-  sp.visible=false; scene.add(sp); labelSprites.push(sp); return sp;
+  sp.scale.set(w*0.13,5.2,1); sp.position.copy(pos.clone().multiplyScalar(1.06));
+  sp.visible=false; globeGroup.add(sp); labelSprites.push(sp); return sp;
 }
 
 CURRENTS.forEach(cur=>{
@@ -370,18 +371,21 @@ CURRENTS.forEach(cur=>{
     vertexColors:true,transparent:true,opacity:0.55}));
   globeGroup.add(line);
 
-  // flowing particles
-  const PC=Math.max(10,Math.round(N/6));
+  // flowing particles — denser, with a head/tail alpha gradient for directional flow
+  const PC=Math.max(16,Math.round(N/4));
   const pg=new THREE.BufferGeometry();
   const ppos=new Float32Array(PC*3);
   const pcol=new Float32Array(PC*3);
   for(let i=0;i<PC;i++){
-    const c=cur.cls==='warm'?tColor(0.9):tColor(0.15);
-    pcol[i*3]=c.r;pcol[i*3+1]=c.g;pcol[i*3+2]=c.b;
+    // brighten the leading edge so flow direction reads clearly
+    const head=i/(PC-1);                 // 0 tail .. 1 head
+    const base=cur.cls==='warm'?tColor(0.9):tColor(0.15);
+    const k=0.35+0.65*head;              // tail dimmer, head brighter
+    pcol[i*3]=base.r*k;pcol[i*3+1]=base.g*k;pcol[i*3+2]=base.b*k;
   }
   pg.setAttribute('position',new THREE.BufferAttribute(ppos,3));
   pg.setAttribute('color',new THREE.BufferAttribute(pcol,3));
-  const pmat=new THREE.PointsMaterial({size:2.6,vertexColors:true,transparent:true,
+  const pmat=new THREE.PointsMaterial({size:3.0,vertexColors:true,transparent:true,
     opacity:0.95,depthWrite:false,blending:THREE.AdditiveBlending});
   const parts=new THREE.Points(pg,pmat);
   globeGroup.add(parts);
@@ -487,13 +491,8 @@ function animate(){
     o.parts.geometry.attributes.position.needsUpdate=true;
   });
 
-  // keep labels attached to rotating globe
-  currentObjs.forEach(o=>{
-    if(!o.label.visible)return;
-    const mid=o.curve.getPoint(0.5).clone();
-    mid.applyEuler(new THREE.Euler(rotX,rotY,0));
-    o.label.position.copy(mid.multiplyScalar(1.05));
-  });
+  // labels are children of globeGroup, so they rotate with the globe
+  // automatically — no manual repositioning needed.
 
   renderer.render(scene,camera);
 }
