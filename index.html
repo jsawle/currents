@@ -390,11 +390,28 @@ CURRENTS.forEach(cur=>{
   const parts=new THREE.Points(pg,pmat);
   globeGroup.add(parts);
 
+  // directional arrowheads along the path (cones oriented along travel direction)
+  const arrows=[];
+  const arrowColor = cur.cls==='warm' ? tColor(0.85) : tColor(0.18);
+  const arrowCount = Math.max(2, Math.round(curve.getLength()/22));
+  const arrowMat = new THREE.MeshBasicMaterial({color:arrowColor,transparent:true,opacity:0.9});
+  for(let a=0;a<arrowCount;a++){
+    const u = (a+0.5)/arrowCount;
+    const pos = curve.getPoint(u);
+    const tan = curve.getTangent(u).normalize();            // direction of travel
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.7,5.2,8), arrowMat);
+    cone.position.copy(pos.clone().multiplyScalar(1.012));
+    // orient cone's +Y axis along the travel tangent
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), tan);
+    globeGroup.add(cone);
+    arrows.push(cone);
+  }
+
   // label at midpoint
   const mid=curve.getPoint(0.5);
   const label=makeLabel(cur.name,mid);
 
-  currentObjs.push({cur,curve,line,parts,PC,phase:Math.random(),label,
+  currentObjs.push({cur,curve,line,parts,PC,phase:Math.random(),label,arrows,arrowMat,
     baseLineOpacity:0.55});
 });
 
@@ -433,7 +450,9 @@ function applyVisibility(){
     o.parts.visible=on;
     o.line.material.opacity = dim?0.06 : o.baseLineOpacity;
     o.parts.material.opacity = dim?0.12 : 0.95;
-    o.parts.material.size = (gulfMode && o.cur.gulf)?3.8:2.6;
+    o.parts.material.size = (gulfMode && o.cur.gulf)?3.8:3.0;
+    o.arrows.forEach(ar=>{ ar.visible = on; });
+    o.arrowMat.opacity = dim?0.1 : 0.9;
     o.label.visible = on && tLabels.checked && (!gulfMode || o.cur.gulf);
   });
 }
